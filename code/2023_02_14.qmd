@@ -1,0 +1,186 @@
+---
+title: "2023-02-13"
+author: "Jasmin Sarah Koenig"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+#| label: libraries
+#| include: FALSE
+
+library(ggplot2)
+library(tidytuesdayR)
+library(tidyverse)
+library(janitor)
+library(hrbrthemes)
+library(ggdist)
+library(lubridate)
+library(patchwork)
+library(wesanderson)
+library(showtext)
+library(ggtext)
+library(geomtextpath)
+
+## Loading Google fonts (https://fonts.google.com/)
+font_add_google("Cabin", "Cabin")
+
+## Automatically use showtext to render text
+showtext_auto()
+
+```
+
+```{r}
+#| label: data-import
+#| include: FALSE
+
+age_gaps <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2023/2023-02-14/age_gaps.csv')
+```
+
+```{r}
+
+age_gaps |> 
+  filter(character_1_gender != character_2_gender) |> 
+  filter(!is.na(actor_1_age)) |> 
+  filter(!is.na(actor_2_age)) |> 
+  mutate(decade = case_when(
+    release_year > 2019 ~ "2020s",
+    release_year > 2009 ~ "2010s",
+    release_year > 1999 ~ "2000s",
+    release_year > 1989 ~ "1990s",
+    release_year > 1979 ~ "1980s",
+    release_year > 1969 ~ "1970s",
+    release_year > 1959 ~ "1960s",
+    release_year > 1949 ~ "1950s",
+    release_year > 1939 ~ "1940s",
+    release_year > 1929 ~ "1930s",
+    TRUE ~ NA_character_
+  ))  |> 
+  select(-contains("birthdate"), -contains("\\d_name")) ->
+  age_clean
+  
+
+age_clean |> 
+  rename("actor_2_gender" = "character_2_gender",
+         "actor_1_gender" = "character_1_gender") |> 
+  mutate(actor_1_age = as.character(actor_1_age),
+         actor_2_age = as.character(actor_2_age)) |> 
+  pivot_longer(cols = starts_with("actor"),
+               names_prefix = "actor_",
+               names_sep = "_",
+               names_to = c("actor", "variable")) |> 
+  pivot_wider(names_from = "variable",
+              values_from = "value") |> 
+  mutate(age = as.numeric(age)) |> 
+  group_by(decade, gender) |> 
+  summarize(mean = mean(age), .groups = "drop") |> 
+  mutate(mean = as.integer(mean)) |> 
+  pivot_wider(names_from = "gender", values_from = "mean") |> 
+  mutate(gap = if_else(man > woman, man - woman, woman - man),
+         label_position = if_else(man > woman, 
+                                  man - gap / 2,
+                                  woman - gap /2)) |> 
+  pivot_longer(cols = c("man", "woman"), 
+               names_to = "gender", 
+               values_to = "mean") ->
+  age_mean
+
+age_clean |> 
+  mutate(older_actor = if_else(actor_1_age > actor_2_age, 
+                               character_1_gender,     
+                               character_2_gender)) |> 
+  mutate(release_year = ymd(release_year,
+                            truncated = 2L)) |> 
+  add_row(release_year = ymd("1929-01-01"), decade = "1930s") |> 
+  add_row(release_year = ymd("1949-01-01"), decade = "1940s") |> 
+  add_row(release_year = ymd("2029-01-01"), decade = "2020s") ->
+  gender_couples
+
+```
+
+# Plotting
+
+```{r}
+cols <- c("NA" = "#FBFAF6", "woman" = "#C93311", "man" = "#899DA4") 
+
+plot <- 
+  ggplot(age_mean, aes(x = mean, y = decade, color = gender)) +
+  geom_line(color = "darkgrey") +
+  geom_point(show.legend = FALSE) +
+  geom_text(aes(x = label_position, 
+                label = gap), 
+            color = "darkgrey", 
+            position = position_nudge(y = 0.22),
+            size = 4) + 
+  labs(y = "Decade", 
+       x = "Mean Age of Actors") +
+  xlim(20, 50) +
+  scale_color_manual(values = cols, na.value="#FBFAF6") +
+  theme_void() +
+  theme(text = element_text(family = "Cabin"),
+        axis.text = element_text(family = "Cabin"),
+        axis.title.x = element_text(family = "Cabin",
+                                    hjust=0.04,
+                                    vjust = -0.5),
+        axis.title.y = element_blank(),
+        legend.position = "bottom",
+        plot.background = element_rect(fill = "#FBFAF6", color = "#FBFAF6"))
+plot
+```
+
+```{r}
+gender_palette <- c("Women" = "#C93311", 
+                   "Men" = "#899DA4",
+                   light_text = "#323A30",
+                   dark_text =  "#0C1509")
+
+distribution <- 
+  ggplot(gender_couples) +
+  geom_dots(aes(y = release_year, 
+           fill = older_actor, 
+           color = older_actor,
+           order = older_actor,
+           group = NA),
+           binwidth = 730, 
+            dotsize = 0.4, 
+            width = 0.2, 
+            stackratio =  1.5, 
+            show.legend = FALSE,
+           layout = "bin") +
+  facet_grid(fct_rev(decade) ~ ., scales = "free_y") +
+  scale_color_manual(values = cols, na.value="#FBFAF6") +
+  scale_fill_manual(values = cols, na.value="#FBFAF6") +
+  labs(subtitle = paste0("<span style='font-size:16pt'>Age Gaps in Hollywood Movies</span> <br><br>
+  <span style='font-size:12pt'>Age gaps of couples between <span style='color:",
+                      gender_palette["Women"], "'>female</span>
+                      and <span style='color:",
+                      gender_palette["Men"], "'>male</span> actors in Hollywood movies. The gender refers to the gender of the character played. Average age gap per decade is shown on the left. On the right, each dot represents one movie. Color indicates what gender the older actors in the couple played. The graph considers only heterosexual couples.</span><br> <br><span style='font-size:10pt'>Source: Data Is Plural. <br>
+                      Graphic: Jasmin Sarah Koenig</span>")) +
+  theme_void() +
+  theme(text = element_text(family = "Cabin",
+                            color = "#4b5748"),
+        strip.background = element_blank(),
+        strip.text.y = element_blank(),
+        plot.subtitle = ggtext::element_textbox_simple(family = "Cabin", 
+                                                       lineheight = 0.8,
+                                                       width = unit(5, "in"),
+                                                       halign = 1,
+                                                       hjust = 0.57,
+                                                       height = unit(2, "in"),
+                                                       margin = margin(550,0,0,0)),
+        plot.background = element_rect(fill = "#FBFAF6", color = "#FBFAF6"))
+
+distribution
+```
+
+```{r final-plot, fig.width = 10, fig.asp = 0.5}
+plot + distribution +
+  theme(plot.margin = margin(t =0,  # Top margin
+                             r = 2,  # Right margin
+                             b = 2,  # Bottom margin
+                             l = 2))
+
+ggsave("plots/2023-02-13.pdf", width = 20, height = 10,  device = cairo_pdf)
+```

@@ -18,13 +18,23 @@ theme_gridY <- theme_void() +
     axis.text.x = element_text(size = 20, family = "rajdhani"),
     axis.text.y = element_markdown(size = 20, family = "rajdhani"),
     axis.title.y.left = element_text(size = 20, family = "rajdhani"),
-    strip.text = element_text(size = 20, family = "rajdhani"),
-    plot.title = element_text(size = 30, family = "rajdhani"),
-    plot.subtitle = element_markdown(size = 25, family = "rajdhani"),
+    strip.text.y = element_text(size = 15, 
+                              family = "rajdhani",
+                              hjust = 1),
+    strip.text.x = element_text(size = 15, 
+                                family = "rajdhani",
+                                hjust = 0.5),
+    plot.title = element_markdown(size = 35, 
+                              family = "rajdhani",
+                              margin = margin(50, 0, 10, 0)),
+    plot.subtitle = element_markdown(size = 25, 
+                                     family = "rajdhani",
+                                     margin = margin(10, 0, 40, 11)),
     plot.caption = element_text(size = 20, family = "rajdhani", face = "plain", hjust = 0.5),
     legend.position = "none",
     legend.key.size = unit(0.5, "cm"),
     plot.margin = grid::unit(c(0, 0.5, 0.5, 0), "mm"),
+    plot.background = element_rect(fill = "#FBFAF6"),
     text = element_text(family = "rajdhani")
   )
 
@@ -34,6 +44,32 @@ theme_set(theme_gridY)
 library(showtext)
 font_add_google(family = "rajdhani", name = "Rajdhani")
 showtext_auto()
+
+detectors_plot |> 
+  ggplot(aes(fill = correct, 
+             values = n,
+             alpha = best)) +
+  geom_waffle(
+    n_rows = 10, 
+    size = 1,
+    color = "white", 
+    make_proportional = TRUE,
+    na.rm = TRUE,
+    flip = TRUE
+  ) +
+  facet_grid(model ~ detector,
+             switch = "y") +
+  labs(title = "<span style='color: #263f3f; font-weight: 900;'> **Can Texts Written by AI  be Detected?** </span>",
+       subtitle = '<span style="color: #263f3f;"> Each detector was given texts either written by GPT4, GPT3, and humans. The visualization<br> shows the share of texts that each AI detector classified <span style="color:#F1BB7B; font-weight: 600;">**correctly**</span> and <span style="color:#5B1A18;  font-weight: 600;">**wrongly**</span> for each author<br>category.<br>The detector that performed best in classifying the text as humand or AI written is emphasized<br>for each author category. OriginalityAI did the best job detecting texts written by one of the<br> most advanced language models, GPT4, classifying 42% correctly.</span>',
+       caption = 'Source: detectors R package\ngraphics: Jasmin Sarah Koenig')+
+  scale_fill_manual(
+    values = c(alpha("#F1BB7B", 1/3), "#F1BB7B", alpha("#5B1A18", 1/3), "#5B1A18")
+  ) +
+  coord_equal() +
+  theme_enhance_waffle()
+
+ggsave("plots/2023-07-17.pdf", height = 10, width = 13, device = cairo_pdf)
+
 
 
 
@@ -152,9 +188,10 @@ detectors_plot |>
     na.rm = TRUE,
     flip = TRUE
   ) +
-  facet_grid(model ~ detector) +
-  labs(title = "Can AI Texts be Detected?",
-       subtitle = 'The visualization shows the share of texts that each AI detector classified <span style="color:#F1BB7B">correctly</span>. and <span style="color:#5B1A18">correctly</span>. The detectors were given either 780 or 925 texts to classify as either written by a human oder an algorithm. OriginalityAI did the best job detecting texts written by GPT4, classifying 42% correctly.')+
+  facet_grid(model ~ detector,
+             switch = "y") +
+  labs(title = "<span style='color: #5B3C18; font-weight: 3000'> Can Texts Written by AI  be Detected? </span>",
+       subtitle = 'Each detector was given texts either written by GPT4, GPT3, and humans. The visualization shows the share of texts that each AI detector classified <span style="color:#F1BB7B">correctly</span> <br> and <span style="color:#5B1A18">wrongly</span> for each author category. The detector that performed best in classifying the text as humand or AI written is emphasized for each author model.OriginalityAI did the best job detecting texts written by one of the most advanced language models, GPT4, classifying 42% correctly.')+
   scale_fill_manual(
     values = c(alpha("#F1BB7B", 1/3), "#F1BB7B", alpha("#5B1A18", 1/3), "#5B1A18")
     ) +

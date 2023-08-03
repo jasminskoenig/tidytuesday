@@ -1,0 +1,142 @@
+---
+title: "2023-07-17"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: libraries
+
+library(tidyverse)
+library(hrbrthemes)
+library(ggtext)
+library(wesanderson)
+library(waffle)
+library(Cairo)
+library(showtext)
+
+```
+
+```{r}
+#| label: set-up
+
+# theme
+theme_jass <- theme_void() +
+  theme(
+    strip.text.y = element_text(size = 90, 
+                              family = "rajdhani",
+                              hjust = 1),
+    strip.text.x = element_text(size = 90, 
+                                family = "rajdhani",
+                                hjust = 0.5),
+    plot.title = element_markdown(size = 15, 
+                              family = "rajdhani",
+                              margin = margin(5, 0, 5, 0),
+                              hjust = -0.007),
+    plot.subtitle = element_textbox_simple(family = "rajdhani",
+                                     hjust = 0.05,
+                                     lineheight = 0.12,
+                                     maxwidth = 0.8,
+                                     margin = margin(15, 0, 25, 0)),
+    legend.position = "none",
+    legend.key.size = unit(0.5, "cm"),
+    plot.margin = grid::unit(c(5, 5, 5, 5), "mm"),
+    plot.background = element_rect(fill = "#FBFAF6"),
+    text = element_text(family = "rajdhani")
+  )
+
+theme_set(theme_jass)
+
+font_add_google(family = "rajdhani", name = "Rajdhani")
+showtext_auto()
+
+# set figure parameters for knitr
+knitr::opts_chunk$set(
+  fig.width = 8,        # 7" width
+  fig.height = 5.2,     
+  fig.retina = 3,       # dpi multiplier for displaying HTML output on retina
+  fig.align = "center", # center align figures
+  dpi = 300             # higher dpi, sharper image
+)
+```
+
+```{r}
+#| label: data-import
+
+detectors <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2023/2023-07-18/detectors.csv') |> 
+  # create variable whether classification was correct
+  mutate(correct = if_else(kind == .pred_class, 1, 0)) 
+
+```
+
+```{r}
+#| label: ordering
+
+# the detectors should be ordered depending on how well they performed in detecting the best GPT model which is GPT4
+detectors |> 
+  group_by(detector, model, correct) |> 
+  count() |> 
+  filter(model == "GPT4" & correct == 1) |> 
+  arrange(desc(n)) |> 
+  pull(detector) ->
+  detector_ordered
+
+# models are ordered by advancedness, humans at end for comparison
+models_ordered <- c("GPT4", "GPT3", "Human")
+```
+
+```{r}
+#| label: dataprep
+
+detectors |> 
+  # identify best detector per model
+  mutate(best = case_when(
+    model == "GPT4" & detector == "OriginalityAI" ~ 1,
+    model == "GPT3" & detector == "Sapling" ~ 1,
+    model == "Human" & detector == "ZeroGPT" ~ 1,
+    TRUE ~ 0
+  )) |> 
+  group_by(detector, model, correct, best) |> 
+  count() |> 
+  # reorder detector and model
+  mutate(detector = factor(detector, detector_ordered),
+         model = factor(model, models_ordered),
+         # create new category for correct
+         # best performign detectors per model will have different colors
+         correct = paste0(correct, best)) |> 
+    # to have the correct cases on top in geom_waffle, we need to arrange by correct
+  arrange(desc(correct)) ->
+  detectors_plot
+
+```
+
+```{r}
+#| label: plot
+#| inclue: true
+
+# learned a lot on how to include text in this from nicola rennie's tidytuesday code!
+
+label <- glue::glue("<span style='color: #263f3f; font-size:120pt; font-weight: 400;'>**Can Texts Written by AI  be Detected?** </span> <p style='color: #263f3f;font-size:95pt;'> <br> Each detector was given texts written by GPT4, GPT3, and humans. The visualization shows the share of texts that each AI detector classified <span style='color:#F1BB7B; font-weight: 400;'>**correctly**</span> and <span style='color:#5B1A18;  font-weight: 400;'>**wrongly**</span> for each author category. The detector that performed best in classifying the text as humand or AI written is emphasized for each author category. OriginalityAI did the best job detecting texts written by one of the most advanced language models, GPT4, classifying <span style='color: #263f3f;  font-weight: 400;'>**42%**</span> correctly.</span> </p> <p style='color: #263f3f; font-size:80pt; '> <br> **data**: Simon Couch's detector R package | **graphics**: Jasmin Sarah König </p>")
+
+detectors_plot |> 
+  ggplot(aes(fill = correct, 
+             values = n,
+             alpha = best)) +
+  geom_waffle(
+    n_rows = 10, 
+    size = 1,
+    color = "#FBFAF6", 
+    make_proportional = TRUE,
+    na.rm = TRUE,
+    flip = TRUE
+  ) +
+  facet_grid(model ~ detector,
+             switch = "y") +
+  
+  labs(subtitle = label)+
+  scale_fill_manual(
+    values = c(alpha("#F1BB7B", 1/3), "#F1BB7B", alpha("#5B1A18", 1/3), "#5B1A18")
+  ) +
+  coord_equal() +
+  theme_enhance_waffle()
+```
